@@ -2,13 +2,13 @@
 #include <QDebug>
 #include <QDateTime>
 
-#define FRAMECOUNT 500
+#define FRAMECOUNT 50
 
 KinectCapture::KinectCapture()
 	:_iks(nullptr)
 	,_frame_reader(nullptr)
 	,m_color_mat(KinectCapture::ColorImageHeight,KinectCapture::ColorImageWidth,CV_8UC4)
-	,m_depth_mat(KinectCapture::DepthImageHeight,KinectCapture::DepthImageWidth,CV_8UC4)
+	,m_depth_mat(KinectCapture::DepthImageHeight,KinectCapture::DepthImageWidth,CV_8UC3)
 	//,_color_image_size(KinectCapture::Width*KinectCapture::Height*KinectCapture::Depth)
 	,m_tm_fmt("yyyyMMdd_HHmmss_zzz")
 	,m_save_dir("E:/Video")
@@ -42,7 +42,7 @@ KinectCapture::~KinectCapture()
 		_iks->Release();
 	}
 
-	m_color_video_writer->release();
+	//m_color_video_writer->release();
 
 
 	//    if(_iks!=nullptr)
@@ -72,6 +72,16 @@ bool KinectCapture::Initialize()
 	{
 		qDebug()<<"Fatal Error: Cannot Open Kinect Sensor";
 		return false;
+	}
+
+	if(m_color_video_writer->isOpened())
+	{
+		m_color_video_writer->release();
+	}
+
+	if(m_depth_video_writer->isOpened())
+	{
+		m_depth_video_writer->release();
 	}
 
 	//    IColorFrameSource *pColorSource = NULL;
@@ -136,27 +146,33 @@ bool KinectCapture::ProcessArrivedFrame(IMultiSourceFrameArrivedEventArgs *args)
 
 	IMultiSourceFrameReference *fr = nullptr;
 
+	bool result = false;
+
 	if(SUCCEEDED(args->get_FrameReference(&fr)))
 	{
 		IMultiSourceFrame *sf = nullptr;
 		if(SUCCEEDED(fr->AcquireFrame(&sf)))
 		{
-			CaptureColorFrame(sf);
-			CaptureDepthFrame(sf);
-
+			//CaptureColorFrame(sf);
+			CaptureDepthFrame(sf,m_frame_count);
+			++m_frame_count;
+			if(m_frame_count==FRAMECOUNT)
+			{
+				qDebug()<<"Record";
+				m_frame_count = 0;
+			}
 			sf->Release();
-
-			return true;
+			result = true;
 		}
 
 		fr->Release();
 	}
 
-	return false;
+	return result;
 
 }
 
-bool KinectCapture::ProcessDepthFrame(UINT16 *pBuffer, USHORT nMinDepth, USHORT nMaxDepth)
+void KinectCapture::ProcessDepthFrame(UINT16 *pBuffer, USHORT nMinDepth, USHORT nMaxDepth)
 {
 	if (pBuffer)
 	{
@@ -169,6 +185,7 @@ bool KinectCapture::ProcessDepthFrame(UINT16 *pBuffer, USHORT nMinDepth, USHORT 
 		//int length = DepthImageSize;
 
 		unsigned char* mat_data = m_depth_mat.ptr<unsigned char>();
+
 
 		while (idx < DepthImageSize)
 		{
@@ -188,23 +205,19 @@ bool KinectCapture::ProcessDepthFrame(UINT16 *pBuffer, USHORT nMinDepth, USHORT 
 			//m_depth_mat[idx][0] = intensity;
 			//m_depth_mat[idx][1] = intensity;
 			//m_depth_mat[idx][2] = intensity;
-			mat_data[idx] = intensity;
-			mat_data[idx*4+1] = intensity;
-			mat_data[idx*4+2] = intensity;
+			mat_data[idx*3] = intensity;
+			mat_data[idx*3+1] = intensity;
+			mat_data[idx*3+2] = intensity;
 
 			++idx;
-
-			//            pRGBX->rgbRed   = intensity;
-			//            pRGBX->rgbGreen = intensity;
-			//            pRGBX->rgbBlue  = intensity;
-
-			//            ++pRGBX;
-			//            ++pBuffer;
 		}
+
+		//cv::imwrite("e:\\projects\\test.png",m_depth_mat);
+
 	}
 }
 
-bool KinectCapture::CaptureDepthFrame(IMultiSourceFrame *sf)
+void KinectCapture::CaptureDepthFrame(IMultiSourceFrame *sf, int frame_count)
 {
 	IDepthFrameReference *idfr = nullptr;
 
@@ -226,14 +239,34 @@ bool KinectCapture::CaptureDepthFrame(IMultiSourceFrame *sf)
 				if(SUCCEEDED(idf->AccessUnderlyingBuffer(&buffer_size,&ptr_buffer)))
 				{
 					ProcessDepthFrame(ptr_buffer,min_dist,max_dist);
+
+					if(frame_count==0)
+					{
+						if(m_depth_video_writer->isOpened())
+						{
+							m_depth_video_writer->release();
+						}
+
+						QString path = m_save_dir.absoluteFilePath("Depth_"+QDateTime::currentDateTime().toString(m_tm_fmt)+".avi");
+						m_depth_video_writer->open(path.toStdString().c_str(),9,8.0,cv::Size(DepthImageWidth,DepthImageHeight));
+
+						//_cvw->write(_color_image);
+					}
+
+
+					m_depth_video_writer->write(m_depth_mat);
 				}
 
+				idfr->Release();
+
 			}
+
+			idf->Release();
 		}
 	}
 }
 
-bool KinectCapture::CaptureColorFrame(IMultiSourceFrame *sf)
+bool KinectCapture::CaptureColorFrame(IMultiSourceFrame *sf, int frame_count)
 {
 	IColorFrameReference *cfr = nullptr;
 
@@ -245,26 +278,19 @@ bool KinectCapture::CaptureColorFrame(IMultiSourceFrame *sf)
 			HRESULT hr = cf->CopyConvertedFrameDataToArray(ColorImageSize,m_color_mat.data,ColorImageFormat_Bgra);
 			if(SUCCEEDED(hr))
 			{
-				if(m_frame_count==0)
+				if(frame_count==0)
 				{
 					if(m_color_video_writer->isOpened())
 					{
 						m_color_video_writer->release();
 					}
 
-					QString path = m_save_dir.absoluteFilePath(QDateTime::currentDateTime().toString(m_tm_fmt)+".avi");
+					QString path = m_save_dir.absoluteFilePath("Color_"+QDateTime::currentDateTime().toString(m_tm_fmt)+".avi");
 					m_color_video_writer->open(path.toStdString().c_str(),9,8.0,cv::Size(ColorImageWidth,ColorImageHeight));
 
-					qDebug()<<"Write to "<<path;
 					//_cvw->write(_color_image);
 				}
 
-				++m_frame_count;
-
-				if(m_frame_count==FRAMECOUNT)
-				{
-					m_frame_count = 0;
-				}
 
 				m_color_video_writer->write(m_color_mat);
 

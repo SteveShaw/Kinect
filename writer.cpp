@@ -89,38 +89,6 @@ void WriterBase::run()
         {
             if(zmq_recv(puller,buf,7,ZMQ_DONTWAIT)>0)
             {
-                if(count==0)
-                {
-                    path = dir.absoluteFilePath(QDateTime::currentDateTime().toString(fmt)+".avi");
-
-                    qDebug()<<path;
-
-                    canWrite = _kc->StartWriteVideo(path.toStdString().c_str());
-                }
-
-                ++count;
-
-
-                if(count < FrameCount)
-                {
-                    qDebug()<<count;
-
-                    if(canWrite)
-                    {
-                        _kc->WriteVideo();
-                    }
-
-                    qDebug()<<"Video Write:"<<canWrite;
-
-                    //_kc->WriteVideo("D:\\Test.avi");
-                                        //_mmf.map();
-                }
-                else
-                {
-                    _kc->EndWriteVideo();
-                    count = 0;
-                }
-
             }
         }
     }

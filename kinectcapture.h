@@ -40,11 +40,11 @@ public:
 
     bool ProcessArrivedFrame(IMultiSourceFrameArrivedEventArgs *args);
 
-    bool ProcessDepthFrame(UINT16 *pBuffer, USHORT nMinDepth, USHORT nMaxDepth);
+		void ProcessDepthFrame(UINT16 *pBuffer, USHORT nMinDepth, USHORT nMaxDepth);
 
-    bool CaptureDepthFrame(IMultiSourceFrame* sf);
+		void CaptureDepthFrame(IMultiSourceFrame* sf, int frame_count);
 
-    bool CaptureColorFrame(IMultiSourceFrame* sf);
+		bool CaptureColorFrame(IMultiSourceFrame* sf, int frame_count);
 
 
 //    void WriteVideo();
@@ -90,6 +90,9 @@ private:
     int m_frame_count;
 
     int _color_image_size;
+
+		QByteArray m_save_path;
+		QByteArray m_image_data;
 
 //    IMultiSourceFrameReader *_frame_reader;
 
